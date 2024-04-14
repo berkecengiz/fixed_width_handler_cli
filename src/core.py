@@ -156,8 +156,8 @@ class FixedWidthFile:
         data = {}
         for field_name, (start, end) in self.FIELD_DEFINITIONS[record_type].items():
             value = line[start:end].strip()
-            if record_type == "TRANSACTION":
-                data = self._parse_transaction_field(field_name, value, line, data)
+            if record_type == "TRANSACTION" and field_name == "amount":
+                self._parse_amount_field(value, line, data)
             else:
                 data[field_name] = value
 
@@ -166,27 +166,6 @@ class FixedWidthFile:
             data["counter"] = f"{self.transaction_counter:06}"
 
         logger.debug("Parsed data for %s: %s", record_type, data)
-        return data
-
-    def _parse_transaction_field(self, field_name, value, line, data):
-        """
-        Parse a field from a transaction record.
-
-        Args:
-            field_name (str): The name of the field.
-            value (str): The value of the field.
-            line (str): The line being parsed.
-            data (dict): The dictionary to store the parsed data.
-
-        Returns:
-            dict: The updated data dictionary.
-        """
-        if field_name == "amount":
-            data = self._parse_amount_field(value, line, data)
-        elif field_name == "currency":
-            data = self._parse_currency_field(value, line, data)
-        else:
-            data[field_name] = value
         return data
 
     def _parse_amount_field(self, value, line, data):
@@ -209,24 +188,6 @@ class FixedWidthFile:
             raise ValueError(f"Invalid amount format: '{value}'") from exc
         return data
 
-    def _parse_currency_field(self, value, line, data):
-        """
-        Parse a currency field from a transaction record.
-
-        Args:
-            value (str): The value of the field.
-            line (str): The line being parsed.
-            data (dict): The dictionary to store the parsed data.
-
-        Returns:
-            dict: The updated data dictionary.
-        """
-        if value not in self.ALLOWED_CURRENCIES:
-            logger.error("Invalid currency code: '%s' in line: '%s'", value, line)
-            raise ValueError(f"Invalid currency code: '{value}'")
-        data["currency"] = value
-        return data
-
     def _validate_data(self, data, record_type):
         """
         Validate parsed data based on the record type.
@@ -236,8 +197,7 @@ class FixedWidthFile:
             record_type (str): The type of record (e.g., HEADER, TRANSACTION, FOOTER).
         """
         if record_type == "TRANSACTION":
-            allowed_currencies = ["USD", "EUR", "GBP"]
-            if data["currency"] not in allowed_currencies:
+            if data["currency"] not in self.ALLOWED_CURRENCIES:
                 logger.error("Invalid currency code: %s", data["currency"])
                 raise ValueError(f"Invalid currency code: {data['currency']}")
 
