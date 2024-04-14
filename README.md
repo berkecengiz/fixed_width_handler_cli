@@ -31,7 +31,9 @@ poetry run cli [command] [options]
 
 ```bash
 poetry run cli get sample.fwf name
+poetry run cli get sample.fwf TRANSACTION amount --transaction_counter 000004
 poetry run cli set sample.fwf address "123 New Address"
+poetry run cli set sample.fwf amount 10 --transaction_counter 000003
 poetry run cli add sample.fwf 500.00 USD
 ```
 
