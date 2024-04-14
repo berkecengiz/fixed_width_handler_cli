@@ -12,7 +12,18 @@ logging.basicConfig(
 )
 
 
-def get_value(filename, record_type, field_name):
+def add_transaction(filename, amount, currency):
+    """
+    Adds a new transaction to the specified fixed-width file.
+    """
+    fixed_width_file = FixedWidthFile(filename)
+    if fixed_width_file.add_transaction(amount, currency):
+        return "Successfully added a new transaction."
+    else:
+        return "Failed to add transaction."
+
+
+def get_value(filename, record_type, field_name, transaction_counter=None):
     """
     Retrieve the value of a field from a fixed-width file for a specific record type.
 
@@ -20,102 +31,56 @@ def get_value(filename, record_type, field_name):
         filename (str): Path to the fixed-width file.
         record_type (str): The type of record (e.g., HEADER, TRANSACTION, FOOTER).
         field_name (str): Name of the field to retrieve.
+        transaction_counter (str, optional): Counter of the transaction to retrieve.
 
     Returns:
-        str: The value of the field if found, None otherwise.
+        str or None: The value of the field if found, or None if not found.
     """
     try:
         fixed_width_file = FixedWidthFile(filename)
         fixed_width_file.read()
-        records = fixed_width_file.data.get(record_type.upper(), [])  # Access records by type
+        records = fixed_width_file.data.get(
+            record_type.upper(), []
+        )  # Access records by type
         if records:
             for record in records:
-                if field_name in record:
-                    return record[field_name]
-        logger.info("Field '%s' not found in any '%s' records in file '%s'.", field_name, record_type, filename)
+                if transaction_counter and record.get("counter") == transaction_counter:
+                    if field_name in record:
+                        return str(
+                            record[field_name]
+                        )  # Convert Decimal or other types to string for consistent output
+                    else:
+                        logger.info(
+                            "Field '%s' not found in transaction '%s' in file '%s'.",
+                            field_name,
+                            transaction_counter,
+                            filename,
+                        )
+                        return None
+            logger.info(
+                "No '%s' records or transactions with counter '%s' in '%s'.",
+                record_type,
+                transaction_counter,
+                filename,
+            )
     except FileNotFoundError:
         logger.error("File not found: %s", filename)
     except IOError as e:
         logger.error("I/O error occurred while reading the file '%s': %s", filename, e)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         logger.error("Error: %s", e)
-    return "Field or record type not found."
+    return None
 
 
-def set_value(filename, field_name, value):
+def set_value(filename, field_name, value, transaction_counter=None):
     """
-    Set the value of a field in a fixed-width file.
-
-    Args:
-        filename (str): Path to the fixed-width file.
-        field_name (str): Name of the field to set.
-        value (str): New value for the field.
-
-    Returns:
-        bool: True if the field was successfully updated, False otherwise.
+    Sets a new value for a field in a specified fixed-width file.
     """
-    try:
-        fixed_width_file = FixedWidthFile(filename)
-        fixed_width_file.read()
-        updated = False
-        for records in fixed_width_file.data.values():
-            for record in records:
-                if field_name in record:
-                    record[field_name] = value
-                    updated = True
-        if updated:
-            fixed_width_file.write()
-            logger.info(
-                "Successfully updated field '%s' to '%s' in file '%s'.",
-                field_name,
-                value,
-                filename,
-            )
-            return True
-        logger.info("Field '%s' not found in file '%s'.", field_name, filename)
-    except FileNotFoundError:
-        logger.error("File not found: %s", filename)
-    except IOError as e:
-        logger.error("I/O error occurred while writing to file '%s': %s", filename, e)
-    except ValueError as e:
-        logger.error("Value error occurred while updating the file: %s", e)
-    return False
-
-
-def add_transaction(filename, amount, currency):
-    """
-    Add a new transaction to a fixed-width file.
-
-    Args:
-        filename (str): Path to the fixed-width file.
-        amount (str): Amount of the transaction.
-        currency (str): Currency code for the transaction.
-
-    Returns:
-        bool: True if the transaction was successfully added, False otherwise.
-    """
-    try:
-        fixed_width_file = FixedWidthFile(filename)
-        fixed_width_file.read()
-        # Automatically generate the next counter
-        counter = str(len(fixed_width_file.data.get("TRANSACTION", [])) + 1).zfill(6)
-        new_transaction = {
-            "field_id": "02",
-            "counter": counter,
-            "amount": f"{amount:.2f}",  # Format amount as a fixed-point number with two decimals
-            "currency": currency,
-        }
-        fixed_width_file.data.setdefault("TRANSACTION", []).append(new_transaction)
-        fixed_width_file.write()
-        logger.info("Added new transaction to file '%s'.", filename)
-        return True
-    except FileNotFoundError:
-        logger.error("File not found: %s", filename)
-    except IOError as e:
-        logger.error("I/O error occurred: %s", e)
-    except ValueError as e:
-        logger.error("Value error during transaction addition: %s", e)
-    return False
+    fixed_width_file = FixedWidthFile(filename)
+    if fixed_width_file.set_value(field_name, value, transaction_counter):
+        return f"Successfully set '{field_name}' to '{value}'."
+    else:
+        return "Failed to set value."
 
 
 def main():
@@ -128,11 +93,21 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Commands available")
 
     # get command
-    # get command
-    get_parser = subparsers.add_parser("get", help="Retrieve a field value from the file")
+    get_parser = subparsers.add_parser(
+        "get", help="Retrieve a field value from the file"
+    )
     get_parser.add_argument("filename", help="Path to the fixed-width file")
-    get_parser.add_argument("record_type", choices=['HEADER', 'TRANSACTION', 'FOOTER'], help="The type of record to retrieve from")
+    get_parser.add_argument(
+        "record_type",
+        choices=["HEADER", "TRANSACTION", "FOOTER"],
+        help="The type of record to retrieve from",
+    )
     get_parser.add_argument("field_name", help="Name of the field to retrieve")
+    get_parser.add_argument(
+        "--transaction_counter",
+        help="Transaction counter for filtering",
+        required=False,
+    )
 
     # set command
     set_parser = subparsers.add_parser(
@@ -141,6 +116,11 @@ def main():
     set_parser.add_argument("filename", help="Path to the fixed-width file")
     set_parser.add_argument("field_name", help="Name of the field to set")
     set_parser.add_argument("value", help="New value for the field")
+    set_parser.add_argument(
+        "--transaction_counter",
+        help="Transaction counter for filtering",
+        required=False,
+    )
 
     # add command
     add_parser = subparsers.add_parser("add", help="Add a new transaction to the file")
@@ -155,13 +135,17 @@ def main():
     args = parser.parse_args()
 
     if args.command == "get":
-        value = get_value(args.filename, args.record_type, args.field_name)
+        value = get_value(
+            args.filename, args.record_type, args.field_name, args.transaction_counter
+        )
         if value is not None:
             print(f"Value of '{args.field_name}': {value}")
         else:
             print("Failed to retrieve value.")
     elif args.command == "set":
-        if set_value(args.filename, args.field_name, args.value):
+        if set_value(
+            args.filename, args.field_name, args.value, args.transaction_counter
+        ):
             print(f"Successfully set '{args.field_name}' to '{args.value}'.")
         else:
             print("Failed to set value.")
