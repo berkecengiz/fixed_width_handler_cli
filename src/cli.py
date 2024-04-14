@@ -12,12 +12,13 @@ logging.basicConfig(
 )
 
 
-def get_value(filename, field_name):
+def get_value(filename, record_type, field_name):
     """
-    Retrieve the value of a field from a fixed-width file.
+    Retrieve the value of a field from a fixed-width file for a specific record type.
 
     Args:
         filename (str): Path to the fixed-width file.
+        record_type (str): The type of record (e.g., HEADER, TRANSACTION, FOOTER).
         field_name (str): Name of the field to retrieve.
 
     Returns:
@@ -26,18 +27,19 @@ def get_value(filename, field_name):
     try:
         fixed_width_file = FixedWidthFile(filename)
         fixed_width_file.read()
-        for records in fixed_width_file.data.values():
+        records = fixed_width_file.data.get(record_type.upper(), [])  # Access records by type
+        if records:
             for record in records:
                 if field_name in record:
                     return record[field_name]
-        logger.info("Field '%s' not found in file '%s'.", field_name, filename)
+        logger.info("Field '%s' not found in any '%s' records in file '%s'.", field_name, record_type, filename)
     except FileNotFoundError:
         logger.error("File not found: %s", filename)
     except IOError as e:
         logger.error("I/O error occurred while reading the file '%s': %s", filename, e)
-    except ValueError as e:
-        logger.error("Value error occurred: %s", e)
-    return None
+    except Exception as e:
+        logger.error("Error: %s", e)
+    return "Field or record type not found."
 
 
 def set_value(filename, field_name, value):
@@ -126,10 +128,10 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Commands available")
 
     # get command
-    get_parser = subparsers.add_parser(
-        "get", help="Retrieve a field value from the file"
-    )
+    # get command
+    get_parser = subparsers.add_parser("get", help="Retrieve a field value from the file")
     get_parser.add_argument("filename", help="Path to the fixed-width file")
+    get_parser.add_argument("record_type", choices=['HEADER', 'TRANSACTION', 'FOOTER'], help="The type of record to retrieve from")
     get_parser.add_argument("field_name", help="Name of the field to retrieve")
 
     # set command
@@ -153,7 +155,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "get":
-        value = get_value(args.filename, args.field_name)
+        value = get_value(args.filename, args.record_type, args.field_name)
         if value is not None:
             print(f"Value of '{args.field_name}': {value}")
         else:
