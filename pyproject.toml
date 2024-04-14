@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "fixed-width-handler"
+version = "0.1.0"
+description = ""
+authors = ["Berke Cengiz <berkecengiz94@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pylint = "^3.1.0"
+pytest = "^8.1.1"
+black = "^24.4.0"
+
+[tool.poetry.scripts]
+cli = "src.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[[tool.poetry.packages]]
+include = "src/*"
