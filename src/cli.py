@@ -23,8 +23,7 @@ def add_transaction(filename, amount, currency):
     fixed_width_file = FixedWidthFile(filename)
     if fixed_width_file.add_transaction(amount, currency):
         return "Successfully added a new transaction."
-    else:
-        return "Failed to add transaction."
+    return "Failed to add transaction."
 
 
 def get_value(filename, record_type, field_name, transaction_counter=None):
@@ -78,8 +77,8 @@ def set_value(filename, record_type, field_name, value, transaction_counter=None
     fixed_width_file = FixedWidthFile(filename)
     if fixed_width_file.set_value(record_type, field_name, value, transaction_counter):
         return f"Successfully set '{field_name}' to '{value}'."
-    else:
-        return "Failed to set value."
+
+    return "Failed to set value."
 
 
 def main():
