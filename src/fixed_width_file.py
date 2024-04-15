@@ -28,6 +28,17 @@ class FixedWidthFile:
         self.file_manager = FixedWidthFileManager(filename)
         self.parser = RecordParser()
         self.transaction_counter = self.initialize_transaction_counter()
+        self.record_types = {
+            "HEADER": {
+                "fields": ["field_id", "file_type", "creation_date", "reserved"],
+            },
+            "TRANSACTION": {
+                "fields": ["field_id", "counter", "amount", "currency", "reserved"],
+            },
+            "FOOTER": {
+                "fields": ["field_id", "total_count", "control_sum", "reserved"],
+            },
+        }
 
     def read(self):
         """Read the file and process the content.
@@ -126,6 +137,7 @@ class FixedWidthFile:
             data = self.parser.parse_line(line, record_type)
             if self.matches_transaction_counter(data, transaction_counter):
                 if field_name == "amount":
+                    old_value = data[field_name]
                     new_value = str(new_value).zfill(12)
                 data[field_name] = new_value
                 lines[i] = self.parser.format_line(data, record_type) + "\\n"
@@ -134,9 +146,11 @@ class FixedWidthFile:
 
         if updated:
             self.file_manager.write_lines(lines)
+            difference = decimal.Decimal(new_value) - decimal.Decimal(old_value)
             self.update_footer(
-                lines, self.transaction_counter, decimal.Decimal(new_value)
+                lines, self.transaction_counter, decimal.Decimal(difference)
             )
+            self.file_manager.write_lines(lines)
         return updated
 
     def update_footer(self, lines, transaction_counter, amount):
