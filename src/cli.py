@@ -3,9 +3,8 @@
 import argparse
 import logging
 
-from src.core import FixedWidthFile
+from src.fixed_width_file import FixedWidthFile
 
-# Setup logging
 logger = logging.getLogger("cli")
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -15,6 +14,11 @@ logging.basicConfig(
 def add_transaction(filename, amount, currency):
     """
     Adds a new transaction to the specified fixed-width file.
+
+    Args:
+        filename (str): Path to the fixed-width file.
+        amount (float): Amount of the transaction.
+        currency (str): Currency code for the transaction.
     """
     fixed_width_file = FixedWidthFile(filename)
     if fixed_width_file.add_transaction(amount, currency):
@@ -38,25 +42,20 @@ def get_value(filename, record_type, field_name, transaction_counter=None):
     """
     try:
         fixed_width_file = FixedWidthFile(filename)
-        fixed_width_file.read()
-        records = fixed_width_file.data.get(
-            record_type.upper(), []
-        )  # Access records by type
+        records = fixed_width_file.read()
         if records:
-            for record in records:
-                if transaction_counter and record.get("counter") == transaction_counter:
-                    if field_name in record:
-                        return str(
-                            record[field_name]
-                        )  # Convert Decimal or other types to string for consistent output
-                    else:
-                        logger.info(
-                            "Field '%s' not found in transaction '%s' in file '%s'.",
-                            field_name,
-                            transaction_counter,
-                            filename,
-                        )
-                        return None
+            filtered_records = [
+                record
+                for record in records
+                if record["type"] == record_type.upper()
+                and (
+                    not transaction_counter
+                    or record.get("counter") == transaction_counter
+                )
+            ]
+            for record in filtered_records:
+                if field_name in record:
+                    return str(record[field_name])
             logger.info(
                 "No '%s' records or transactions with counter '%s' in '%s'.",
                 record_type,
@@ -72,12 +71,12 @@ def get_value(filename, record_type, field_name, transaction_counter=None):
     return None
 
 
-def set_value(filename, field_name, value, transaction_counter=None):
+def set_value(filename, record_type, field_name, value, transaction_counter=None):
     """
     Sets a new value for a field in a specified fixed-width file.
     """
     fixed_width_file = FixedWidthFile(filename)
-    if fixed_width_file.set_value(field_name, value, transaction_counter):
+    if fixed_width_file.set_value(record_type, field_name, value, transaction_counter):
         return f"Successfully set '{field_name}' to '{value}'."
     else:
         return "Failed to set value."
@@ -90,17 +89,19 @@ def main():
     parser = argparse.ArgumentParser(
         description="Manage and manipulate fixed-width files."
     )
+    parser.set_defaults(func=lambda x: parser.print_help())
     subparsers = parser.add_subparsers(dest="command", help="Commands available")
 
     # get command
     get_parser = subparsers.add_parser(
-        "get", help="Retrieve a field value from the file"
+        "get",
+        help="Retrieve a field value from the file. Example: get filename HEADER field_name",
     )
     get_parser.add_argument("filename", help="Path to the fixed-width file")
     get_parser.add_argument(
         "record_type",
-        choices=["HEADER", "TRANSACTION", "FOOTER"],
         help="The type of record to retrieve from",
+        choices=["HEADER", "TRANSACTION", "FOOTER"],
     )
     get_parser.add_argument("field_name", help="Name of the field to retrieve")
     get_parser.add_argument(
@@ -108,12 +109,19 @@ def main():
         help="Transaction counter for filtering",
         required=False,
     )
+    get_parser.set_defaults(func=get_value)
 
     # set command
     set_parser = subparsers.add_parser(
-        "set", help="Set a new value for a field in the file"
+        "set",
+        help="Set a new value for a field in the file. Example: set filename field_name value",
     )
     set_parser.add_argument("filename", help="Path to the fixed-width file")
+    set_parser.add_argument(
+        "record_type",
+        help="The type of record to set the field in",
+        choices=["HEADER", "TRANSACTION", "FOOTER"],
+    )
     set_parser.add_argument("field_name", help="Name of the field to set")
     set_parser.add_argument("value", help="New value for the field")
     set_parser.add_argument(
@@ -121,9 +129,13 @@ def main():
         help="Transaction counter for filtering",
         required=False,
     )
+    set_parser.set_defaults(func=set_value)
 
     # add command
-    add_parser = subparsers.add_parser("add", help="Add a new transaction to the file")
+    add_parser = subparsers.add_parser(
+        "add",
+        help="Add a new transaction to the file. Example: add filename amount currency",
+    )
     add_parser.add_argument("filename", help="Path to the fixed-width file")
     add_parser.add_argument(
         "amount", type=float, help="Amount of the transaction (format: 1234.56)"
@@ -131,6 +143,7 @@ def main():
     add_parser.add_argument(
         "currency", help="Currency code for the transaction (e.g., USD, EUR, GBP)"
     )
+    add_parser.set_defaults(func=add_transaction)
 
     args = parser.parse_args()
 
@@ -144,7 +157,11 @@ def main():
             print("Failed to retrieve value.")
     elif args.command == "set":
         if set_value(
-            args.filename, args.field_name, args.value, args.transaction_counter
+            args.filename,
+            args.record_type,
+            args.field_name,
+            args.value,
+            args.transaction_counter,
         ):
             print(f"Successfully set '{args.field_name}' to '{args.value}'.")
         else:
@@ -155,4 +172,4 @@ def main():
         else:
             print("Failed to add transaction.")
     else:
-        print("Unknown command.")
+        parser.print_help()
