@@ -7,6 +7,7 @@ logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+
 class RecordParser:
     """
     Parses and formats records for fixed-width files.

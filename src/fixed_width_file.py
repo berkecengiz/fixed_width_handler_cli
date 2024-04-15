@@ -9,7 +9,6 @@ import logging
 from src.fixed_width_file_handler import FixedWidthFileManager
 from src.record_parser import RecordParser
 
-
 logger = logging.getLogger("FixedWidthFile")
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -31,7 +30,11 @@ class FixedWidthFile:
         self.transaction_counter = self.initialize_transaction_counter()
 
     def read(self):
-        """Read the file and process the content."""
+        """Read the file and process the content.
+
+        Returns:
+            list: The processed records from the file.
+        """
         lines = self.file_manager.read_lines()
         records = self.process_content(lines)
         return records
@@ -121,23 +124,19 @@ class FixedWidthFile:
         updated = False
         for i, line in enumerate(lines):
             data = self.parser.parse_line(line, record_type)
-            if transaction_counter is None or data.get("counter", "").zfill(
-                6
-            ) == transaction_counter.zfill(6):
-                if transaction_counter is None or data.get("counter", "").zfill(
-                    6
-                ) == transaction_counter.zfill(6):
-                    if field_name == "amount":  # Specific handling for the amount field
-                        new_value = str(new_value).zfill(
-                            12
-                        )  # Ensure new_value has correct length
-                    data[field_name] = new_value
-                    lines[i] = self.parser.format_line(data, record_type) + "\\n"
-                    updated = True
-                    break
+            if self.matches_transaction_counter(data, transaction_counter):
+                if field_name == "amount":
+                    new_value = str(new_value).zfill(12)
+                data[field_name] = new_value
+                lines[i] = self.parser.format_line(data, record_type) + "\\n"
+                updated = True
+                break
 
         if updated:
             self.file_manager.write_lines(lines)
+            self.update_footer(
+                lines, self.transaction_counter, decimal.Decimal(new_value)
+            )
         return updated
 
     def update_footer(self, lines, transaction_counter, amount):
@@ -165,7 +164,14 @@ class FixedWidthFile:
             raise
 
     def find_footer(self, lines):
-        """Find and return the footer line from the file lines."""
+        """Find and return the footer line from the file lines.
+
+        Args:
+            lines (list): The list of lines in the file.
+
+        Returns:
+            tuple: The index of the footer line and the footer data.
+        """
         for i in reversed(range(len(lines))):
             if "03" == lines[i][:2].strip():
                 return i, self.parser.parse_line(lines[i], "FOOTER")
@@ -173,10 +179,28 @@ class FixedWidthFile:
         raise ValueError("Footer not found in the file.")
 
     def initialize_transaction_counter(self):
-        """Initialize the transaction counter by reading the existing records."""
+        """Initialize the transaction counter by reading the existing records.
+
+        Returns:
+            int: The number of existing transactions.
+        """
         lines = self.file_manager.read_lines()
         counter = 0
         for line in lines:
             if line.startswith("02"):
                 counter += 1
         return counter
+
+    def matches_transaction_counter(self, data, transaction_counter):
+        """Check if the transaction counter in the data matches the provided transaction counter.
+
+        Args:
+            data (dict): The data dictionary.
+            transaction_counter (str): The transaction counter to match.
+
+        Returns:
+            bool: True if the transaction counter matches, False otherwise.
+        """
+        return transaction_counter is None or data.get("counter", "").zfill(
+            6
+        ) == transaction_counter.zfill(6)
